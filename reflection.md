@@ -7,6 +7,28 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+* we need a Pet class to be able to create for each pet
+* check what the pet needs done (tasks like walks, feeding, meds, enrichment, grooming, etc.)
+* do tasks depending on priority, time availability, owner preferences
+
+4 Classes - Owner / Pet / Tasks / Scheduler
+
+class Owner:
+name:
+available_mins:
+preferences:
+
+class Pet:
+name:
+species:
+
+class Task:
+title:
+duration:
+priority
+
+class Scheduler
+
 **b. Design changes**
 
 - Did your design change during implementation?

@@ -48,6 +48,32 @@ class Scheduler
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+**Tradeoff: greedy, priority-first task selection instead of an optimal fit.**
+
+`Scheduler.filter_by_time()` sorts pending tasks by priority (then shortest
+duration) and adds them one by one until the owner's `available_mins` runs out.
+It is a _greedy_ algorithm: it commits to the highest-priority tasks first and
+never reconsiders. This means it can leave time on the table — for example, with
+a 60-minute budget and tasks of 50 (high), 30 (medium), and 30 (medium) minutes,
+it schedules only the 50-minute task and wastes 10 minutes, even though the two
+30-minute tasks would have filled the day exactly. A true optimizer (0/1 knapsack)
+would pack the time more tightly.
+
+I chose greedy anyway because it is reasonable for this scenario:
+
+- **It honors what the owner actually cares about.** For pet care, doing the
+  _important_ tasks (meds, feeding) matters more than squeezing maximum minutes
+  out of the day. A knapsack that maximizes time used could drop a high-priority
+  task to fit two low-priority ones — the wrong call for a pet.
+- **It is simple, fast, and predictable.** `O(n log n)` for the sort vs. the
+  added complexity of a DP table, for a list that is only ever a handful of tasks.
+- **It is explainable.** `explain()` can state a clear rule ("highest priority
+  first, until time runs out"), which an owner can trust and predict.
+
+A related tradeoff: conflict detection only _warns_ (`detect_overlaps()` returns
+messages) rather than auto-resolving clashes. The owner stays in control and
+decides what to move, instead of the app silently dropping or rescheduling a task.
+
 ---
 
 ## 3. AI Collaboration

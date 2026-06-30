@@ -1,4 +1,8 @@
+from datetime import time as dtime
+
 import streamlit as st
+
+from pawpal_system import Owner, Pet, Task, Scheduler
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -38,51 +42,108 @@ At minimum, your system should:
 
 st.divider()
 
-st.subheader("Quick Demo Inputs (UI only)")
+st.subheader("Quick Demo Inputs")
 owner_name = st.text_input("Owner name", value="Jordan")
+available_mins = st.number_input(
+    "Available minutes today", min_value=0, max_value=1440, value=120
+)
 pet_name = st.text_input("Pet name", value="Mochi")
 species = st.selectbox("Species", ["dog", "cat", "other"])
 
+# Create the Owner and Pet once and keep them in the session vault so they
+# survive Streamlit's reruns; only then sync them with the current UI values.
+if "owner" not in st.session_state:
+    pet = Pet(name=pet_name, species=species)
+    owner = Owner(name=owner_name, available_mins=int(available_mins))
+    owner.add_pet(pet)
+    st.session_state.owner = owner
+    st.session_state.pet = pet
+
+owner = st.session_state.owner
+pet = st.session_state.pet
+
+# Keep the persisted objects in step with whatever is currently typed in.
+owner.name = owner_name
+owner.available_mins = int(available_mins)
+pet.name = pet_name
+pet.species = species
+
 st.markdown("### Tasks")
-st.caption("Add a few tasks. In your final version, these should feed into your scheduler.")
+st.caption("Add a few tasks. These feed directly into your scheduler.")
 
-if "tasks" not in st.session_state:
-    st.session_state.tasks = []
-
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
 with col2:
-    duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
+    duration = st.number_input(
+        "Duration (minutes)", min_value=1, max_value=240, value=20)
 with col3:
     priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
+with col4:
+    start_time = st.time_input("Start time", value=dtime(8, 0))
 
 if st.button("Add task"):
-    st.session_state.tasks.append(
-        {"title": task_title, "duration_minutes": int(duration), "priority": priority}
+    pet.add_task(Task(
+        title=task_title,
+        duration=int(duration),
+        priority=priority,
+        time=start_time.strftime("%H:%M"),
+    ))
+
+if pet.tasks:
+    st.write(f"Current tasks for {pet.summary()}:")
+    st.table(
+        [
+            {
+                "title": t.title,
+                "time": t.time or "—",
+                "duration_minutes": t.duration,
+                "priority": t.priority,
+                "completed": t.completed,
+            }
+            for t in pet.tasks
+        ]
     )
 
-if st.session_state.tasks:
-    st.write("Current tasks:")
-    st.table(st.session_state.tasks)
+    # Lightweight conflict check: warn (don't crash) on overlapping tasks.
+    conflicts = Scheduler(owner).detect_overlaps()
+    if conflicts:
+        st.warning("Scheduling conflicts detected:\n\n" +
+                   "\n\n".join(conflicts))
 else:
     st.info("No tasks yet. Add one above.")
 
 st.divider()
 
 st.subheader("Build Schedule")
-st.caption("This button should call your scheduling logic once you implement it.")
+st.caption(
+    "Runs the Scheduler over the tasks above, within the available time budget.")
 
 if st.button("Generate schedule"):
-    st.warning(
-        "Not implemented yet. Next step: create your scheduling logic (classes/functions) and call it here."
-    )
-    st.markdown(
-        """
-Suggested approach:
-1. Design your UML (draft).
-2. Create class stubs (no logic).
-3. Implement scheduling behavior.
-4. Connect your scheduler here and display results.
-"""
-    )
+    scheduler = Scheduler(owner)
+    plan = scheduler.generate_plan()
+
+    conflicts = scheduler.detect_overlaps()
+    if conflicts:
+        st.warning("Heads up — overlapping tasks:\n\n" +
+                   "\n\n".join(conflicts))
+
+    if plan:
+        st.success(f"Scheduled {len(plan)} task(s).")
+        st.table(
+            [
+                {
+                    "title": t.title,
+                    "pet": t.pet_name,
+                    "duration_minutes": t.duration,
+                    "priority": t.priority,
+                }
+                for t in plan
+            ]
+        )
+    else:
+        st.warning(
+            "No tasks fit in the available time. Add tasks or raise the budget.")
+
+    st.markdown("#### Explanation")
+    st.text(scheduler.explain())

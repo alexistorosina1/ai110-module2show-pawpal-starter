@@ -44,15 +44,16 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+# Today's Schedule
 
-```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
-```
+Daily plan for Sam (55/60 min used):
+
+- Feeding for Mittens (10 min) [priority: high]
+- Morning walk for Biscuit (30 min) [priority: high]
+- Litter cleanup for Mittens (15 min) [priority: medium]
+  Skipped — not enough time left:
+- Grooming for Biscuit (20 min) [priority: low]
+  Reasoning: tasks are ordered by priority (high first), then by shortest duration, and added until the time budget runs out.
 
 ## 🧪 Testing PawPal+
 
@@ -72,14 +73,37 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+All scheduling logic lives in `pawpal_system.py` (classes `Task`, `Pet`, `Owner`,
+`Scheduler`). Each feature below names the method that implements it.
 
-| Feature           | Method(s) | Notes                             |
-| ----------------- | --------- | --------------------------------- |
-| Task sorting      |           | e.g., by priority, duration       |
-| Filtering         |           | e.g., skip tasks if time runs out |
-| Conflict handling |           | e.g., overlapping time slots      |
-| Recurring tasks   |           | e.g., daily vs. weekly            |
+| Feature                     | Method(s)                                          | Notes                                                                   |
+| --------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| Sort by priority            | `Scheduler.sort_tasks()`                           | Orders pending tasks by priority rank, then shortest duration.          |
+| Sort by time                | `Scheduler.sort_by_time()`                         | Chronological by `"HH:MM"` start; untimed tasks sort last.              |
+| Filter by pet / status      | `Scheduler.filter_tasks()`                         | Optional `pet_name` and/or `completed` filters; both optional.          |
+| Filter by time budget       | `Scheduler.filter_by_time()`                       | Greedily keeps tasks that fit within the owner's `available_mins`.      |
+| Recurring tasks             | `Task.mark_complete()`, `Task.next_occurrence()`   | Completing a `"daily"`/`"weekly"` task auto-spawns the next instance.   |
+| Conflict handling (basic)   | `Scheduler.detect_conflicts()`                     | Lightweight: flags tasks sharing the exact same start time.             |
+| Conflict handling (overlap) | `Scheduler.detect_overlaps()`                      | Stronger: flags overlapping time _ranges_ using start + duration.       |
+| Conflict report             | `Scheduler.conflict_report()`                      | Returns a warning string (never raises); `check_overlaps` toggles mode. |
+| Build & explain the plan    | `Scheduler.generate_plan()`, `Scheduler.explain()` | Produces the final ordered plan and a human-readable rationale.         |
+
+### Feature details
+
+- **Sorting.** `sort_tasks()` ranks by priority (`PRIORITY_RANK`) then duration;
+  `sort_by_time()` uses a lambda key on the `"HH:MM"` string, which sorts
+  chronologically because the values are zero-padded 24-hour times.
+- **Filtering.** `filter_tasks(pet_name=..., completed=...)` skips any filter
+  left as `None`, so it handles "all of Mochi's tasks", "all open tasks", or
+  both at once. `filter_by_time()` is the time-budget greedy selector.
+- **Recurring tasks.** `Task.recurrence` is `"none"`, `"daily"`, or `"weekly"`.
+  When `mark_complete()` is called, `next_occurrence()` clones the task (via
+  `dataclasses.replace`) with its `date` advanced by `RECURRENCE_DELTAS` and
+  appends it to the same pet using the `Task.pet` back-reference.
+- **Conflict detection.** `detect_conflicts()` is the lightweight same-start-time
+  check; `detect_overlaps()` is the stronger interval check that also catches
+  partial overlaps (e.g. an 18:15 task inside an 18:00–18:30 task). Both return
+  warning strings and skip untimed/malformed entries rather than crashing.
 
 ## 📸 Demo Walkthrough
 

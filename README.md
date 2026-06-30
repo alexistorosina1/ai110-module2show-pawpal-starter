@@ -22,6 +22,33 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+PawPal+ turns a list of pet-care tasks into an explainable daily plan. The
+scheduling algorithms (all in `pawpal_system.py`) are:
+
+- **Priority sorting** — `Scheduler.sort_tasks()` orders pending tasks by
+  priority rank (high → medium → low), breaking ties by shortest duration first.
+- **Sorting by time** — `Scheduler.sort_by_time()` lists tasks chronologically by
+  their `"HH:MM"` start time; untimed tasks sort to the end.
+- **Filtering** — `Scheduler.filter_tasks()` returns tasks by pet name and/or
+  completion status (each filter optional, pet matching is case-insensitive).
+- **Time-budget planning** — `Scheduler.filter_by_time()` / `generate_plan()`
+  greedily fit the highest-priority tasks into the owner's `available_mins`.
+- **Conflict warnings (same start time)** — `Scheduler.detect_conflicts()` flags
+  tasks that begin at the exact same `"HH:MM"`, across pets.
+- **Conflict warnings (overlapping ranges)** — `Scheduler.detect_overlaps()` uses
+  start + duration to catch partial overlaps a same-start check would miss
+  (e.g. an 18:15 task inside an 18:00–18:30 window).
+- **Daily / weekly recurrence** — `Task.mark_complete()` +
+  `Task.next_occurrence()` auto-spawn the next instance of a recurring task,
+  advanced by one day or one week and reset to not-completed.
+- **Plan explanation** — `Scheduler.explain()` lists what was scheduled, what was
+  skipped for lack of time, and the reasoning behind the order.
+
+A more detailed method-by-method reference is in
+[📐 Smarter Scheduling](#-smarter-scheduling) below.
+
 ## Getting started
 
 ### Setup
@@ -41,6 +68,14 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+## 🧩 Class Design (UML)
+
+The class diagram below reflects the final implementation in `pawpal_system.py`
+(`Task`, `Pet`, `Owner`, `Scheduler`) and their relationships. The Mermaid source
+lives at [`diagrams/uml_final.mmd`](diagrams/uml_final.mmd).
+
+![PawPal+ class diagram](diagrams/uml_final.png)
 
 ## 🖥️ Sample Output
 
@@ -138,14 +173,121 @@ All scheduling logic lives in `pawpal_system.py` (classes `Task`, `Pet`, `Owner`
   partial overlaps (e.g. an 18:15 task inside an 18:00–18:30 task). Both return
   warning strings and skip untimed/malformed entries rather than crashing.
 
-## 📸 Demo Walkthrough
+## 🎬 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### The Streamlit app
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+Launch the interactive UI with:
 
-**Screenshot or video** _(optional)_: <!-- Insert a screenshot or link to a demo video here -->
+```bash
+streamlit run app.py
+```
+
+The app has three areas:
+
+1. **Quick Demo Inputs** — set the owner's name, the daily time budget (in
+   minutes), and the pet's name and species.
+2. **Tasks** — add care tasks (title, duration, priority, start time) with the
+   **Add task** button. The task table can be re-ordered with the **Sort tasks
+   by** toggle (Priority or Start time), shows an at-a-glance metrics row
+   (pending tasks, time needed, daily budget), and surfaces any scheduling
+   conflicts as a warning beneath it.
+3. **Build Schedule** — the **Generate schedule** button runs the Scheduler over
+   the available time budget, shows the chosen tasks, and prints the plain-text
+   explanation of what was scheduled and why.
+
+### Example workflow
+
+1. Enter the owner (`Sam`, `60` minutes) and a pet (`Biscuit`, `dog`).
+2. Add a few tasks — e.g. an 18:00 high-priority "Evening walk" (30 min) and a
+   09:30 low-priority "Grooming" (20 min).
+3. Add a second pet's task that starts at 18:00 too (e.g. "Vet call") to trigger
+   a conflict.
+4. Watch the **conflict warning** appear under the task table, flagging the
+   18:00 clash in plain language.
+5. Click **Generate schedule** to see the prioritized, time-budgeted plan plus
+   the reasoning, and the metrics row showing minutes used vs. your budget.
+
+### Key Scheduler behaviors on display
+
+- **Sorting** — toggle between priority order and chronological order.
+- **Filtering / time budget** — only the tasks that fit in `available_mins` are
+  scheduled; lower-priority tasks that don't fit are reported as skipped.
+- **Conflict warnings** — same-start-time and overlapping-range clashes are shown
+  as amber advisories (never errors), with a suggested fix.
+- **Recurrence** — completing a daily/weekly task spawns its next occurrence.
+
+### Sample CLI output (`python main.py`)
+
+`main.py` is a non-interactive demo that exercises the same Scheduler methods and
+prints to the terminal:
+
+```text
+Completing Feeding (daily) and Grooming (weekly)...
+  Feeding spawned next: Feeding on 2026-07-01
+  Grooming spawned next: Grooming on 2026-07-07
+PawPal+ Demo
+========================================
+
+All tasks (insertion order)
+----------------------------------------
+  ---------- 18:00  Evening walk     Biscuit  [high] (open)
+  2026-06-30 09:30  Grooming         Biscuit  [low] (done) {weekly}
+  2026-07-07 09:30  Grooming         Biscuit  [low] (open) {weekly}
+  2026-06-30 07:15  Feeding          Mittens  [high] (done) {daily}
+  ---------- 12:45  Litter cleanup   Mittens  [medium] (open)
+  ---------- 18:00  Vet call         Mittens  [high] (open)
+  ---------- 18:15  Pill time        Mittens  [medium] (open)
+  2026-07-01 07:15  Feeding          Mittens  [high] (open) {daily}
+
+Pending tasks sorted by time
+----------------------------------------
+  2026-07-01 07:15  Feeding          Mittens  [high] (open) {daily}
+  2026-07-07 09:30  Grooming         Biscuit  [low] (open) {weekly}
+  ---------- 12:45  Litter cleanup   Mittens  [medium] (open)
+  ---------- 18:00  Evening walk     Biscuit  [high] (open)
+  ---------- 18:00  Vet call         Mittens  [high] (open)
+  ---------- 18:15  Pill time        Mittens  [medium] (open)
+
+Filter: Biscuit's tasks
+----------------------------------------
+  ---------- 18:00  Evening walk     Biscuit  [high] (open)
+  2026-06-30 09:30  Grooming         Biscuit  [low] (done) {weekly}
+  2026-07-07 09:30  Grooming         Biscuit  [low] (open) {weekly}
+
+Filter: completed tasks
+----------------------------------------
+  2026-06-30 09:30  Grooming         Biscuit  [low] (done) {weekly}
+  2026-06-30 07:15  Feeding          Mittens  [high] (done) {daily}
+
+Filter: open tasks
+----------------------------------------
+  ---------- 18:00  Evening walk     Biscuit  [high] (open)
+  2026-07-07 09:30  Grooming         Biscuit  [low] (open) {weekly}
+  ---------- 12:45  Litter cleanup   Mittens  [medium] (open)
+  ---------- 18:00  Vet call         Mittens  [high] (open)
+  ---------- 18:15  Pill time        Mittens  [medium] (open)
+  2026-07-01 07:15  Feeding          Mittens  [high] (open) {daily}
+
+Conflict check (lightweight: same start time)
+----------------------------------------
+Found 1 conflict(s):
+⚠️ Conflict at 18:00: Evening walk (Biscuit), Vet call (Mittens)
+
+Conflict check (stronger: overlapping time ranges)
+----------------------------------------
+Found 2 conflict(s):
+⚠️ Overlap: Evening walk (Biscuit) 18:00–18:30 vs Vet call (Mittens) 18:00–18:10
+⚠️ Overlap: Evening walk (Biscuit) 18:00–18:30 vs Pill time (Mittens) 18:15–18:20
+
+========================================
+Daily plan for Sam (55/60 min used):
+  - Vet call for Mittens (10 min) [priority: high]
+  - Feeding for Mittens (10 min) [priority: high]
+  - Evening walk for Biscuit (30 min) [priority: high]
+  - Pill time for Mittens (5 min) [priority: medium]
+Skipped — not enough time left:
+  - Litter cleanup for Mittens (15 min) [priority: medium]
+  - Grooming for Biscuit (20 min) [priority: low]
+Reasoning: tasks are ordered by priority (high first), then by shortest duration, and added until the time budget runs out.
+```

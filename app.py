@@ -6,6 +6,29 @@ from pawpal_system import Owner, Pet, Task, Scheduler
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
+
+def render_conflicts(conflicts):
+    """Present scheduler conflict warnings in a pet-owner-friendly way.
+
+    Conflicts are advisories, not errors, so we use st.warning (amber) and lead
+    with a count, itemize each clash as its own line, and end with a suggested
+    fix. When nothing clashes we give positive confirmation via st.success.
+    """
+    if not conflicts:
+        st.success("✅ No scheduling conflicts — your pet's day is all set!")
+        return
+    count = len(conflicts)
+    label = "conflict" if count == 1 else "conflicts"
+    # Strip the leading marker so we can render clean markdown bullets.
+    bullets = "\n".join(f"- {c.lstrip('⚠️ ').strip()}" for c in conflicts)
+    st.warning(
+        f"**Heads up — {count} scheduling {label} found**\n\n"
+        f"{bullets}\n\n"
+        "💡 These tasks overlap in time. Consider rescheduling one of them "
+        "so your pet isn't double-booked."
+    )
+
+
 st.title("🐾 PawPal+")
 
 st.markdown(
@@ -91,25 +114,45 @@ if st.button("Add task"):
     ))
 
 if pet.tasks:
+    scheduler = Scheduler(owner)
+
     st.write(f"Current tasks for {pet.summary()}:")
+    sort_choice = st.radio(
+        "Sort tasks by",
+        ["Priority", "Start time"],
+        horizontal=True,
+    )
+    # Let the Scheduler decide the order rather than using insertion order.
+    ordered = (
+        scheduler.sort_tasks()
+        if sort_choice == "Priority"
+        else scheduler.sort_by_time()
+    )
+
+    # At-a-glance summary so the owner sees workload vs. budget instantly.
+    pending = scheduler.pending_tasks()
+    planned_mins = sum(t.duration for t in pending)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Pending tasks", len(pending))
+    m2.metric("Time needed", f"{planned_mins} min")
+    m3.metric("Daily budget", f"{owner.available_mins} min")
+
     st.table(
         [
             {
                 "title": t.title,
+                "pet": t.pet_name or "—",
                 "time": t.time or "—",
                 "duration_minutes": t.duration,
                 "priority": t.priority,
                 "completed": t.completed,
             }
-            for t in pet.tasks
+            for t in ordered
         ]
     )
 
     # Lightweight conflict check: warn (don't crash) on overlapping tasks.
-    conflicts = Scheduler(owner).detect_overlaps()
-    if conflicts:
-        st.warning("Scheduling conflicts detected:\n\n" +
-                   "\n\n".join(conflicts))
+    render_conflicts(scheduler.detect_overlaps())
 else:
     st.info("No tasks yet. Add one above.")
 
@@ -123,13 +166,12 @@ if st.button("Generate schedule"):
     scheduler = Scheduler(owner)
     plan = scheduler.generate_plan()
 
-    conflicts = scheduler.detect_overlaps()
-    if conflicts:
-        st.warning("Heads up — overlapping tasks:\n\n" +
-                   "\n\n".join(conflicts))
-
     if plan:
-        st.success(f"Scheduled {len(plan)} task(s).")
+        used = sum(t.duration for t in plan)
+        st.success(
+            f"✅ Scheduled {len(plan)} task(s) — "
+            f"{used} of {owner.available_mins} min used."
+        )
         st.table(
             [
                 {
@@ -144,6 +186,9 @@ if st.button("Generate schedule"):
     else:
         st.warning(
             "No tasks fit in the available time. Add tasks or raise the budget.")
+
+    # Surface time-overlap warnings using the shared, owner-friendly renderer.
+    render_conflicts(scheduler.detect_overlaps())
 
     st.markdown("#### Explanation")
     st.text(scheduler.explain())

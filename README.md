@@ -57,19 +57,52 @@ Daily plan for Sam (55/60 min used):
 
 ## 🧪 Testing PawPal+
 
+Run the full test suite from the project root:
+
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+`pytest.ini` sets `pythonpath = .`, so the command works without any extra
+environment setup.
+
+### What the tests cover
+
+The suite in `tests/test_pawpal.py` verifies the core scheduling behaviors:
+
+- **Task completion** — `mark_complete()` flips a task's status to completed.
+- **Task assignment** — adding a task to a `Pet` increases that pet's task count.
+- **Sorting correctness** — `sort_by_time()` returns tasks in chronological
+  order, with untimed tasks sorting last.
+- **Recurrence logic** — completing a `"daily"` task auto-spawns a new instance
+  dated one day later, reset to not-completed.
+- **Conflict detection** — `detect_conflicts()` flags tasks that share the exact
+  same start time (and leaves non-clashing tasks alone).
+
+### Sample test output
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+platform darwin -- Python 3.13.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/alexistorosina/Desktop/codepath/ai110-module2show-pawpal-starter
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.14.0
+collected 5 items
+
+tests/test_pawpal.py .....                                               [100%]
+
+============================== 5 passed in 0.04s ===============================
 ```
+
+### Confidence Level
+
+**★★★★☆ (4/5)** — The most important scheduling behaviors (sorting, recurrence,
+and conflict detection) are verified and passing. Confidence is held at 4 rather
+than 5 because some edge cases are not yet covered: the time-budget greedy
+selector (`filter_by_time`), interval-overlap detection (`detect_overlaps`),
+month/year date rollovers for recurring tasks, and the `date.today()` fallback
+when a recurring task has no explicit date.
 
 ## 📐 Smarter Scheduling
 
